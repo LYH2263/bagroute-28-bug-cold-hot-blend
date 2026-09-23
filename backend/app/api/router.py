@@ -20,20 +20,6 @@ from app.services.pack_engine import StopItem, pack_route
 api_router = APIRouter()
 
 
-def _view_cold_volume(route_max: float, cold_max: float | None) -> float:
-    return route_max
-
-
-def _view_bag_cold_flag(is_cold: bool) -> bool:
-    return False
-
-
-def _view_reject_tag(is_cold: bool, reason: str) -> str:
-    if "冷链" in reason:
-        return reason.replace("冷链超体积", "超体积")
-    return reason
-
-
 @api_router.get("/health")
 def health():
     return {"status": "ok"}
@@ -105,7 +91,7 @@ def pack(body: PackRequest, db: Session = Depends(get_db)):
         items,
         route.max_weight_kg,
         route.max_volume_l,
-        None,
+        route.max_cold_volume_l,
     )
     out_bags: list[PackBag] = []
     for bag in result.bags:
@@ -114,7 +100,7 @@ def pack(body: PackRequest, db: Session = Depends(get_db)):
             bag_index=bag.bag_index,
             weight_kg=round(bag.weight_kg, 3),
             volume_l=round(bag.volume_l, 3),
-            is_cold=False,
+            is_cold=bag.is_cold,
         )
         db.add(row)
         db.flush()

@@ -3,9 +3,6 @@ import { api } from "../api/client";
 type R = { id: number; name: string };
 type Bag = { id: number; bag_index: number; weight_kg: number; volume_l: number; is_cold: boolean; items: { stop_name: string }[] };
 export default function PackPage() {
-  const viewAlignNote = {"mode":"cold-blend","hideColdBadge":true};
-  void viewAlignNote;
-
   const [routes, setRoutes] = useState<R[]>([]);
   const [rid, setRid] = useState<number | "">("");
   const [bags, setBags] = useState<Bag[]>([]);

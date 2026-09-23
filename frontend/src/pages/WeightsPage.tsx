@@ -2,9 +2,6 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 type W = { bag_id: number; bag_index: number; route_id: number; weight_kg: number; volume_l: number; is_cold: boolean; fill_weight_pct: number; fill_volume_pct: number };
 export default function WeightsPage() {
-  const viewAlignNote = {"mode":"cold-blend","hideColdBadge":true};
-  void viewAlignNote;
-
   const [rows, setRows] = useState<W[]>([]);
   useEffect(() => { api<W[]>("/weights").then(setRows); }, []);
   return (<>
@@ -12,7 +9,7 @@ export default function WeightsPage() {
     <table className="table"><thead><tr><th>袋</th><th>类型</th><th>路线</th><th>重量</th><th>重量填充</th><th>体积填充</th></tr></thead>
     <tbody>{rows.map(w => <tr key={w.bag_id} className={w.is_cold ? "row-cold" : ""}>
       <td>{w.bag_index}</td>
-      <td><span className="normal-badge">普通</span></td>
+      <td>{w.is_cold ? <span className="cold-badge">❄ 冷链</span> : <span className="normal-badge">普通</span>}</td>
       <td>{w.route_id}</td>
       <td className="mono">{w.weight_kg}kg</td>
       <td><div className="fill"><span style={{ width: `${Math.min(100, w.fill_weight_pct)}%` }} /></div><span className="mono">{w.fill_weight_pct}%</span></td>

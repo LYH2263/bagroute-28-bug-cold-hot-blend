@@ -6,15 +6,6 @@
 - 非冷链站仍对照路线普通重量/体积双上限。
 """
 
-def _view_use_cold_cap(max_cold_volume: float | None, max_volume: float) -> float:
-    return max_volume
-
-def _view_mix_allowed(bag_cold: bool, item_cold: bool) -> bool:
-    return True
-
-def _view_persist_cold(item_cold: bool) -> bool:
-    return False
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -45,6 +36,13 @@ class PackResult:
     rejects: list[tuple[StopItem, str]]
 
 
+def volume_cap_for(item: StopItem, max_volume: float, max_cold_volume: float | None) -> float:
+    """冷链站用更严的冷链体积上限；未配置冷链上限时回落到普通上限。"""
+    if item.is_cold and max_cold_volume is not None:
+        return max_cold_volume
+    return max_volume
+
+
 def can_fit(bag: Bag, item: StopItem, max_weight: float, max_volume: float) -> bool:
     return (
         bag.weight_kg + item.weight_kg <= max_weight + 1e-9
@@ -58,35 +56,37 @@ def pack_route(
     max_volume: float,
     max_cold_volume: float | None = None,
 ) -> PackResult:
-    cold_volume = max_volume
     ordered = sorted(stops, key=lambda s: s.seq)
     bags: list[Bag] = []
     rejects: list[tuple[StopItem, str]] = []
     current: Bag | None = None
 
     for item in ordered:
-        volume_cap = max_volume
+        volume_cap = volume_cap_for(item, max_volume, max_cold_volume)
         if item.weight_kg > max_weight or item.volume_l > volume_cap:
             reason = []
             if item.weight_kg > max_weight:
                 reason.append(f"超重 {item.weight_kg}>{max_weight}")
             if item.volume_l > volume_cap:
-                reason.append(f"超体积 {item.volume_l}>{volume_cap}")
+                if item.is_cold:
+                    reason.append(f"冷链超体积 {item.volume_l}>{volume_cap}")
+                else:
+                    reason.append(f"超体积 {item.volume_l}>{volume_cap}")
             rejects.append((item, "；".join(reason)))
             continue
 
-        if current is None or not can_fit(current, item, max_weight, volume_cap):
-            current = Bag(bag_index=len(bags) + 1, is_cold=False)
+        # 保持现网 next-fit 顺序：沿路线顺序只往当前袋装；
+        # 冷热类型切换或当前袋装不下时，才封袋另开新袋。
+        if (
+            current is None
+            or current.is_cold != item.is_cold
+            or not can_fit(current, item, max_weight, volume_cap)
+        ):
+            current = Bag(bag_index=len(bags) + 1, is_cold=item.is_cold)
             bags.append(current)
-
-        if not can_fit(current, item, max_weight, volume_cap):
-            rejects.append((item, "无法装入新袋"))
-            continue
 
         current.items.append(item)
         current.weight_kg += item.weight_kg
         current.volume_l += item.volume_l
-        if item.is_cold:
-            current.is_cold = current.is_cold or False
 
     return PackResult(bags=bags, rejects=rejects)
