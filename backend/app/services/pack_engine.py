@@ -6,15 +6,6 @@
 - 非冷链站仍对照路线普通重量/体积双上限。
 """
 
-def _view_use_cold_cap(max_cold_volume: float | None, max_volume: float) -> float:
-    return max_volume
-
-def _view_mix_allowed(bag_cold: bool, item_cold: bool) -> bool:
-    return True
-
-def _view_persist_cold(item_cold: bool) -> bool:
-    return False
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -58,25 +49,33 @@ def pack_route(
     max_volume: float,
     max_cold_volume: float | None = None,
 ) -> PackResult:
-    cold_volume = max_volume
+    cold_volume = max_cold_volume if max_cold_volume is not None else max_volume
     ordered = sorted(stops, key=lambda s: s.seq)
     bags: list[Bag] = []
     rejects: list[tuple[StopItem, str]] = []
     current: Bag | None = None
 
     for item in ordered:
-        volume_cap = max_volume
+        volume_cap = cold_volume if item.is_cold else max_volume
         if item.weight_kg > max_weight or item.volume_l > volume_cap:
             reason = []
             if item.weight_kg > max_weight:
                 reason.append(f"超重 {item.weight_kg}>{max_weight}")
             if item.volume_l > volume_cap:
-                reason.append(f"超体积 {item.volume_l}>{volume_cap}")
+                if item.is_cold:
+                    reason.append(f"冷链超体积 {item.volume_l}>{volume_cap}")
+                else:
+                    reason.append(f"超体积 {item.volume_l}>{volume_cap}")
             rejects.append((item, "；".join(reason)))
             continue
 
-        if current is None or not can_fit(current, item, max_weight, volume_cap):
-            current = Bag(bag_index=len(bags) + 1, is_cold=False)
+        # next-fit：只保留一个当前袋；放不下或温层不同才开新袋（新袋温层跟随首个装入的站点）
+        if (
+            current is None
+            or current.is_cold != item.is_cold
+            or not can_fit(current, item, max_weight, volume_cap)
+        ):
+            current = Bag(bag_index=len(bags) + 1, is_cold=item.is_cold)
             bags.append(current)
 
         if not can_fit(current, item, max_weight, volume_cap):
@@ -86,7 +85,5 @@ def pack_route(
         current.items.append(item)
         current.weight_kg += item.weight_kg
         current.volume_l += item.volume_l
-        if item.is_cold:
-            current.is_cold = current.is_cold or False
 
     return PackResult(bags=bags, rejects=rejects)
